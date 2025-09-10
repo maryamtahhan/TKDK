@@ -215,11 +215,11 @@ func amdCheck(r *Registry) {
 func amdDeviceStartup() Device {
 	a := amdAccImpl
 	if err := a.InitLib(); err != nil {
-		logging.Errorf("Error initializing %s: %v", amdType.String(), err)
+		logging.Debugf("Error initializing %s: %v", amdType.String(), err)
 		return nil
 	}
 	if err := a.Init(); err != nil {
-		logging.Errorf("Failed to init device: %v", err)
+		logging.Errorf("failed to Init device: %v", err)
 		return nil
 	}
 	logging.Debugf("Using %s to obtain GPU info", amdType.String())

@@ -23,6 +23,7 @@ type MCVConfig struct {
 	KubeConfig       string
 	EnabledBaremetal *bool
 	SkipPrecheck     *bool
+	Initialized      bool
 }
 
 type Config struct {
@@ -71,7 +72,7 @@ func Instance() *Config {
 }
 
 func IsInitialized() bool {
-	return instance != nil
+	return instance == nil
 }
 
 func getMCVConfig(confDir string) MCVConfig {
@@ -82,6 +83,7 @@ func getMCVConfig(confDir string) MCVConfig {
 		EnabledStub:      parseBoolEnv(envEnableSTUB, false),
 		MCVNamespace:     getConfig(envMCVNamespace, defaultNamespace, confDir),
 		KubeConfig:       getConfig(envKubeConfig, defaultKubeConfig, confDir),
+		Initialized:      true,
 	}
 }
 

@@ -18,6 +18,7 @@ package devices
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"sort"
 	"strconv"
@@ -267,12 +268,23 @@ func updateCache() (*DeviceCache, error) {
 }
 
 func saveCache(devices map[string]Device) error {
+	// Check if devices map is nil or empty
+	if len(devices) == 0 {
+		return fmt.Errorf("no devices to cache")
+	}
+
 	cache := DeviceCache{
 		Timestamp: time.Now(),
 		Devices:   make(map[string]CachedDevice),
 	}
 
 	for name, device := range devices {
+		// Check if device is nil
+		if device == nil {
+			logging.Errorf("Device %s is nil, skipping", name)
+			continue
+		}
+
 		tritonInfo, err := device.GetAllGPUInfo()
 		if err != nil {
 			logging.Errorf("Failed to get GPU info for device %s: %v", name, err)
@@ -295,6 +307,11 @@ func saveCache(devices map[string]Device) error {
 		}
 	}
 
+	// Don't save cache if no valid devices were found
+	if len(cache.Devices) == 0 {
+		return fmt.Errorf("no valid devices to save to cache")
+	}
+
 	file, err := os.Create(cacheFilePath)
 	if err != nil {
 		return err
@@ -304,41 +321,43 @@ func saveCache(devices map[string]Device) error {
 	return json.NewEncoder(file).Encode(cache)
 }
 
-// Startup initializes and returns a new Device according to the given DeviceType [NVML|OTHER].
-func Startup(a string) Device {
-	logging.Debugf("Starting up device of type %s", a)
-
-	cache, err := loadAndUpdateCache()
-	if err == nil {
-		if cachedDevice, ok := cache.Devices[a]; ok {
-			logging.Debugf("Using cached configuration for %s", a)
-			registry := GetRegistry()
-			if deviceStartup, ok := registry.Registry[a][cachedDevice.DeviceType]; ok {
-				device := deviceStartup()
-				logging.Debugf("Restored device instance for %s from cache", a)
-				return device
-			}
-			logging.Errorf("No startup function found for cached device type %s", cachedDevice.DeviceType.String())
-		}
-	}
-
-	// Fall back: Retrieve the global registry and Probe devices
+// Startup starts a device of the given hardware type
+func Startup(hwType string) Device {
+	logging.Debugf("Starting up device of type %s", hwType)
 	registry := GetRegistry()
 
-	for d := range registry.Registry[a] {
-		// Attempt to start the device from the registry
-		if deviceStartup, ok := registry.Registry[a][d]; ok {
-			logging.Debugf("Starting up %s", d.String())
-			device := deviceStartup()
-
-			// Save the device to the cache
-			saveCache(map[string]Device{a: device})
-
-			return device
+	// Try to load from cache first
+	cache, err := loadAndUpdateCache()
+	if err == nil {
+		if _, ok := cache.Devices[hwType]; ok {
+			logging.Debugf("Using cached configuration for %s", hwType)
+			// Restore device instance from cache
+			if deviceTypes, exists := registry.Registry[hwType]; exists {
+				for _, creator := range deviceTypes {
+					device := creator()
+					if device != nil {
+						logging.Debugf("Restored device instance for %s from cache", hwType)
+						return device
+					}
+				}
+			}
 		}
 	}
-	// The device type is unsupported
-	logging.Errorf("unsupported Device")
+
+	// Fallback to device registration and startup
+	if deviceTypes, exists := registry.Registry[hwType]; exists {
+		for devType, creator := range deviceTypes {
+			logging.Debugf("Starting up %s", devType.String())
+			device := creator()
+			if device != nil {
+				// Only save to cache if device initialization was successful
+				if err := saveCache(map[string]Device{hwType: device}); err != nil {
+					logging.Debugf("Failed to save device cache: %v", err)
+				}
+				return device
+			}
+		}
+	}
 	return nil
 }
 

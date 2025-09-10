@@ -253,6 +253,8 @@ func configureBoolFlags(baremetalFlag, noGPUFlag, stub bool) {
 		return
 	}
 
+	logging.Debugf("Detecting accelerators")
+	// Auto-detect accelerator hardware if GPU is not already enabled
 	xpuInfo, err := client.GetXPUInfo(client.HwOptions{EnableStub: &stub})
 	if err != nil || xpuInfo == nil || xpuInfo.Acc == nil || len(xpuInfo.Acc.Devices) == 0 {
 		logging.Warn("No hardware accelerator found. GPU mode will be disabled.")
